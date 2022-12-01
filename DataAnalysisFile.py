@@ -47,16 +47,94 @@ sns.heatmap(filtered_corr_df,annot=True,cmap="Reds")
 plt.savefig('HeatMap.png')
 
 # we can see in the imgage that we have multicolinearity therefroe removing those columns
-a= {}
+a= set()
 for i in x.columns:
     for j in x.columns:
         if(i != j):
-            if((abs(np.cov(x[i],x[j]) >=0.4)) and (abs(np.cov(x[i],x[j]))) < 1.0):
-                a.add(i)
-                a.add(j)
+            if(abs(x[i].corr(x[j])) >=0.4):
+               if(abs(x[i].corr(x[j])) < 1.0):
+                   a.add(i)
+                   a.add(j)
+               else:
+                   a.add(i)
+# 7 cols have been removed based on multicolinarity and less corr
+X_filter = df[list(a)]
+X_filter.head()
+y= df['blueWins']
+y.head(2)
+full_col = X_filter.columns
+
+rSkCol1,lSkCol1=[],[]
+for i in rSkCol:
+    if i in full_col:
+        rSkCol1.append(i)
+for i in lSkCol:
+    if i in full_col:
+        lSkCol1.append(i)        
+
+
+# Z score outlier removel
+for i in X_filter.columns:
+    up = X_filter[i].mean()+3*X_filter[i].std()
+    dw = X_filter[i].mean()-3*X_filter[i].std()
+    z=X_filter[i]
+    X_filter[i]= np.where(X_filter[i] > up,
+                   up,
+                   np.where(X_filter[i] < dw,
+                            dw,
+                            X_filter[i]
+                           ))
+
+# IQR outlier removel
+for i in X_filter.columns:
+    up = X_filter[i].quantile(0.75)+1.5*(X_filter[i].quantile(0.75)-X_filter[i].quantile(0.25))
+    dw = X_filter[i].quantile(0.25)-1.5*(X_filter[i].quantile(0.75)-X_filter[i].quantile(0.25))
+    X_filter[i]= np.where(X_filter[i] > up,
+                   up,
+                   np.where(X_filter[i] < dw,
+                            dw,
+                            X_filter[i]
+                           ))
+    
+
+X_filter.boxplot() 
+
+## feature transformation
+from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import FunctionTransformer
+from sklearn.preprocessing import StandardScaler
+
+transformX = ColumnTransformer(transformers=[('Log Tranform',FunctionTransformer(func=np.log1p),rSkCol1),
+                                            ('Square Transform',FunctionTransformer(func=np.square),lSkCol1),
+                                           ('Stander Scaler',StandardScaler(),full_col )],remainder='passthrough')
+
+X_filter=transformX.fit_transform(X_filter)
+## model building
+
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import train_test_split
+from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import GridSearchCV
+
+xtrain, xtest, ytrain, ytest =  train_test_split( X_filter, y, test_size=0.30, random_state=42)
+model = LogisticRegression()
+solvers = ['newton-cg', 'lbfgs', 'liblinear']
+penalty = ['l2']
+c_values = [1000,100, 10, 1.0, 0.1, 0.01,0.001]
+grid = dict(solver=solvers,penalty=penalty,C=c_values)
+
+grid_search = GridSearchCV(estimator=model, param_grid=grid,cv=5, n_jobs=-1, scoring='accuracy')
+
+grid_result = grid_search.fit(xtrain, ytrain)
 
 
 
+print("Best: %f using %s" % (grid_result.best_score_, grid_result.best_params_))
+means = grid_result.cv_results_['mean_test_score']
+stds = grid_result.cv_results_['std_test_score']
+params = grid_result.cv_results_['params']
+for mean, stdev, param in zip(means, stds, params):
+    print("%f (%f) with: %r" % (mean, stdev, param))
 
 
 
