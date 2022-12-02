@@ -6,12 +6,12 @@ import seaborn as sns
 df = pd.read_csv('OriginalData.csv', index_col=False)
 df.head()
 
-x = df.drop(['blueWins'],axis=1)
-x.head()
-
 ## Dropping gameID feature
 df.drop(['gameId'],axis=1,inplace=True)
 df.head(2)
+
+x = df.drop(['blueWins'],axis=1)
+x.head()
 
 ## plt displot
 for i in df.columns:
@@ -51,14 +51,13 @@ a= set()
 for i in x.columns:
     for j in x.columns:
         if(i != j):
-            if(abs(x[i].corr(x[j])) >=0.4):
-               if(abs(x[i].corr(x[j])) < 1.0):
-                   a.add(i)
-                   a.add(j)
-               else:
-                   a.add(i)
+            b= abs(x[i].corr(x[j]))
+            if(b == 1.0):
+                     a.add(i)
+                     a.add(j)
+            
 # 7 cols have been removed based on multicolinarity and less corr
-X_filter = df[list(a)]
+X_filter = x.drop(list(a),axis=1)
 X_filter.head()
 y= df['blueWins']
 y.head(2)
@@ -108,15 +107,16 @@ transformX = ColumnTransformer(transformers=[('Log Tranform',FunctionTransformer
                                             ('Square Transform',FunctionTransformer(func=np.square),lSkCol1),
                                            ('Stander Scaler',StandardScaler(),full_col )],remainder='passthrough')
 
-X_filter=transformX.fit_transform(X_filter)
-## model building
-
-from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
+X_filter=transformX.fit_transform(X_filter)
+xtrain, xtest, ytrain, ytest =  train_test_split( X_filter, y, test_size=0.30, random_state=42)
+
+
 from sklearn.model_selection import cross_val_score
 from sklearn.model_selection import GridSearchCV
 
-xtrain, xtest, ytrain, ytest =  train_test_split( X_filter, y, test_size=0.30, random_state=42)
+## model building Logistic Reg.
+from sklearn.linear_model import LogisticRegression
 model = LogisticRegression()
 solvers = ['newton-cg', 'lbfgs', 'liblinear']
 penalty = ['l2']
@@ -128,7 +128,6 @@ grid_search = GridSearchCV(estimator=model, param_grid=grid,cv=5, n_jobs=-1, sco
 grid_result = grid_search.fit(xtrain, ytrain)
 
 
-
 print("Best: %f using %s" % (grid_result.best_score_, grid_result.best_params_))
 means = grid_result.cv_results_['mean_test_score']
 stds = grid_result.cv_results_['std_test_score']
@@ -137,7 +136,13 @@ for mean, stdev, param in zip(means, stds, params):
     print("%f (%f) with: %r" % (mean, stdev, param))
 
 
+## SVM classifier
+from sklearn.svm import SVC
+param_grid = {'C': [0.1, 1, 10, 100, 1000], 
+              'gamma': [1, 0.1, 0.01, 0.001, 0.0001],
+              'kernel': ['rbf']}
 
+grid_search = GridSearchCV(estimator=SVC(), param_grid=param_grid,cv=5, n_jobs=-1, scoring='accuracy')
 
 
 
